@@ -167,23 +167,73 @@ END
 END
 END
 GO
+
 EXEC spBokaNyDelorder 105, 20,'NikeSkor'
 EXEC spBokaNyDelorder 106, 20,'BILTESLA'
 
+IF OBJECT_ID (N'spBokaNyOrder', N'P') IS NOT NULL
+    DROP proc spBokaNyOrder;
+GO
+
+CREATE PROC spBokaNyOrder
+(
+@Antalprodukter int,
+@ProduktNamn nvarchar(50),
+@kundförnamn nvarchar(50),
+@kundefternamn nvarchar(50),
+@adress nvarchar(50),
+@fraktbolag nvarchar(50),
+@orderdatum date,
+@skeppningsdatum date
+)
+AS
+
+IF (dbo.GetProductID(@ProduktNamn) is Null)
+ BEGIN
+ PRINT @ProduktNamn + ' går inte att beställa, välj annan produkt'
+	RETURN
+ END
+ELSE
+BEGIN
+IF (dbo.GetKundID(@kundförnamn, @kundefternamn, @adress) is Null)
+BEGIN
+ PRINT ' Kunden är inte registerad, registrera kund först'
+	RETURN
+ END
+ELSE
+BEGIN
+IF (dbo.GetFraktbolagID(@fraktbolag) is Null)
+BEGIN
+ PRINT 'fraktbolaget är inte registerad, registrera kund fraktbolaget'
+	RETURN
+ END
+ELSE
+BEGIN
+DECLARE @NYTTORDERNR AS INT
+DECLARE @fraktbID AS INT
+set @NYTTORDERNR =  dbo.GetNextOrderNr();
+
+set @fraktbID = dbo.GetFraktbolagID(@fraktbolag);
 
 
+INSERT INTO tblOrder(OrderNummer, Orderdatum, Skeppningsdatum, FraktbolagID, KundID)
 
+VALUES (@NYTTORDERNR, @orderdatum, @skeppningsdatum, @fraktbID, dbo.GetKundID(@kundförnamn, @kundefternamn, @adress));
 
+INSERT INTO tblOrderProdukt(AntalProdukter,ProduktID,OrderID)
+ VALUES (@Antalprodukter, dbo.GetProductID(@ProduktNamn), dbo.OrderID(@NYTTORDERNR));
+END
+END
+END
+GO
 
+select  dbo.GetNextOrderNr();
 
+EXEC spBokaNyOrder 100,'BILTesla','King','Kong', 'Thaigatan 2  BamgKock', 'akkafrakt','2016-05-03', '2016-06-01'
 
+select dbo.GetFraktbolagID('akkafrakt')
 
-
- --INSERT INTO tblOrder(FraktbolagID,KundID,Skeppningsdatum,Orderdatum,Orderdatum,OrderNummer)
- --VALUES ('Cardinal','Tom B. Erichsen','Skagen 21','Stavanger','4006','Norway');
-
-
-
+EXEC spVisaAllaOrdrar
 
 
 
@@ -259,7 +309,35 @@ BEGIN
      
 END
 GO
+
 select  dbo.GetProductID('NikeSkor') ;
 
 Declare @ProduktNamn nvarchar(50)='NikeSkor'
 SELECT tblProdukter.ProduktID from tblProdukter where tblProdukter.ProduktNamn = @ProduktNamn
+
+IF OBJECT_ID (N'GetKundID', N'FN') IS NOT NULL
+    DROP FUNCTION GetKundID;
+GO
+CREATE FUNCTION GetKundID(@förnamn AS nvarchar(50), @efternamn as nvarchar(50), @adress as nvarchar(50)) 
+
+returns int
+AS 
+BEGIN
+RETURN (SELECT distinct tblKund.KundID from tblKund where tblKund.KundFörNamn = @förnamn and tblKund.KundEfterNamn = @efternamn and tblKund.KundAdress = @adress)
+END
+GO
+
+IF OBJECT_ID (N'GetFraktbolagID', N'FN') IS NOT NULL
+    DROP FUNCTION GetFraktbolagID;
+GO
+CREATE FUNCTION GetFraktbolagID(@fraktbolag as nvarchar(50)) 
+
+returns int
+AS 
+BEGIN
+RETURN (SELECT tblFraktbolag.FraktbolagID from tblFraktbolag where tblFraktbolag.FraktbolagsNamn = @fraktbolag)
+END
+GO
+
+SELECT tblFraktbolag.FraktbolagID from tblFraktbolag where tblFraktbolag.FraktbolagsNamn = 'akkafrakt'
+select *from tblFraktbolag
