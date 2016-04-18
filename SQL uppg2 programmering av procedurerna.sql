@@ -231,6 +231,9 @@ select  dbo.GetNextOrderNr();
 
 EXEC spBokaNyOrder 100,'BILTesla','King','Kong', 'Thaigatan 2  BamgKock', 'akkafrakt','2016-05-03', '2016-06-01'
 
+EXEC spBokaNyDelorder 112, 20,'NikeSkor'
+EXEC spBokaNyDelorderX 102, 20,'NikeSkor'
+EXEC spBokaNyDelorderX 102, 20,'BILTesla'
 select dbo.GetFraktbolagID('akkafrakt')
 
 EXEC spVisaAllaOrdrar
@@ -310,6 +313,20 @@ BEGIN
 END
 GO
 
+IF OBJECT_ID (N'GetProductXID', N'FN') IS NOT NULL
+    DROP FUNCTION GetProductXID;
+GO
+CREATE FUNCTION GetProductXID(@ProduktNamn1 AS nvarchar(50)='NikeSkor') 
+
+returns int
+AS 
+
+BEGIN
+    RETURN (SELECT tblProdukter.ProduktID from tblProdukter where tblProdukter.ProduktNamn = @ProduktNamn1)
+     
+END
+GO
+
 select  dbo.GetProductID('NikeSkor') ;
 
 Declare @ProduktNamn nvarchar(50)='NikeSkor'
@@ -341,3 +358,54 @@ GO
 
 SELECT tblFraktbolag.FraktbolagID from tblFraktbolag where tblFraktbolag.FraktbolagsNamn = 'akkafrakt'
 select *from tblFraktbolag
+
+
+--Om en produkt inte är tillgänglig så kan det inte ingå i en order. VG uppgift, kan lösas med villkor och print. 
+--Kan också lösas av de som har läst på triggers med en AFTER INSERT trigger.
+
+IF OBJECT_ID (N'trgInsertOrderProdukt', N'T') IS NOT NULL
+    DROP TRIGGER trgInsertOrderProdukt;
+GO
+
+create trigger trgInsertOrderProdukt
+ON dbo.tblOrderProdukt
+ AFTER INSERT,UPDATE
+AS
+BEGIN
+declare @oldvalue int
+declare @newvalue int
+
+select @newvalue = ProduktID from inserted
+if (SELECT tblProdukter.ProduktID from tblProdukter where tblProdukter.ProduktID = @Newvalue and tblProdukter.Tillgänglig=1) is null
+begin
+raiserror('Product inte tillgänglig', 16, 1)
+rollback transaction
+end
+else
+print 'ok'
+END
+GO
+
+IF OBJECT_ID (N'spBokaNyDelorderX', N'P') IS NOT NULL
+    DROP PROC spBokaNyDelorderX;
+GO
+
+CREATE PROC spBokaNyDelorderX
+(
+@OrderNummer int,
+@Antalprodukter int,
+@ProduktNamn nvarchar(50)
+)
+AS
+
+IF (select dbo.OrderID(@OrderNummer)) is Null 
+BEGIN
+PRINT 'Finns ingen befintlig order med det ordernumret, inget är sparat'
+RETURN
+END
+ELSE
+BEGIN
+INSERT INTO tblOrderProdukt(AntalProdukter,ProduktID,OrderID)
+ VALUES (@Antalprodukter, dbo.GetProductXID(@ProduktNamn), dbo.OrderID(@OrderNummer));
+END
+GO
